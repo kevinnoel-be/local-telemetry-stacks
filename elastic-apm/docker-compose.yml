@@ -1,0 +1,90 @@
+version: "2"
+services:
+  # Test app to generate traces
+  hotrod:
+    image: jaegertracing/example-hotrod:latest
+    command: ["all"]
+    environment:
+      JAEGER_AGENT_HOST: otel
+      JAEGER_AGENT_PORT: 6831
+    ports: 
+      - "8080:8080"
+    depends_on:
+      - otel
+    networks:
+      - telemetry
+
+  # Collect traces
+  otel:
+    image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_TAG:-0.48.0}
+    command: [ "--config=/etc/otel-config.yaml" ]
+    volumes:
+      - ./otel-config.yaml:/etc/otel-config.yaml
+    ports:
+      - "6831:6831" # Jaeger thrift compact
+    depends_on:
+      - apm
+    networks:
+      - telemetry
+
+  # Transform traces to ECS & push to ES
+  # see https://www.elastic.co/guide/en/apm/guide/8.1/quick-start-overview.html 
+  apm:
+    image: docker.elastic.co/apm/apm-server:${ELASTIC_BUNDLE_TAG:-8.1.2}
+    command: --strict.perms=false -e
+    ports:
+      - "8200:8200" # HTTP & gRPC
+    volumes:
+      - "./apm-config.yaml:/usr/share/apm-server/apm-server.yml:ro"
+    depends_on:
+      - es01
+      - kibana
+    networks:
+      - telemetry
+
+  # Show traces
+  # see https://www.elastic.co/guide/en/kibana/8.1/docker.html
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_BUNDLE_TAG:-8.1.2}
+    environment:
+      SERVER_NAME: kibana
+      ELASTICSEARCH_URL: http://es01:9700
+      ELASTICSEARCH_HOSTS: http://es01:9700
+    ports:
+      - "5601:5601" # HTTP
+    depends_on:
+      - es01
+    networks:
+      - telemetry
+
+  # Store traces in an Elasticsearch single-node cluster
+  # see https://www.elastic.co/guide/en/elasticsearch/reference/8.1/docker.html
+  es01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_BUNDLE_TAG:-8.1.2}
+    environment:
+      node.name: es01
+      http.port: 9700
+      cluster.name: es-docker-cluster
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile: 65536
+    volumes:
+      - "es_data01:/usr/share/elasticsearch/data"
+    ports:
+      - "9700:9700" # HTTP
+    networks:
+      - telemetry
+
+volumes:
+  es_data01:
+    driver: local
+
+networks:
+  telemetry:
+    driver: bridge

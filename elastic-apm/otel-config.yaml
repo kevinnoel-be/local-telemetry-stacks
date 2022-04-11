@@ -1,0 +1,40 @@
+receivers:
+  jaeger:
+    protocols:
+      thrift_compact: 
+        endpoint: 0.0.0.0:6831
+
+exporters:
+  logging:
+    logLevel: info
+
+  otlp/elastic:
+    endpoint: apm:8200
+    tls:
+      insecure: true
+
+processors:
+  batch:
+
+extensions:
+  health_check:
+  zpages:
+
+service:
+  telemetry:
+    logs:
+      level: INFO
+
+  extensions:
+    - zpages
+    - health_check
+
+  pipelines:
+    traces:
+      receivers:
+        - jaeger
+      processors:
+        - batch
+      exporters:
+        - logging
+        - otlp/elastic

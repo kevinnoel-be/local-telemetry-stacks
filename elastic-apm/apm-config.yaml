@@ -1,0 +1,14 @@
+apm-server:
+  host: 0.0.0.0:8200
+  kibana:
+    enabled: true
+    host: kibana:5601
+
+setup:
+  kibana.host: kibana:5601
+  template.settings.index.number_of_replicas: 0
+
+output.elasticsearch:
+  hosts: '${ELASTICSEARCH_HOSTS:es01:9700}'
+  username: '${ELASTICSEARCH_USERNAME:}'
+  password: '${ELASTICSEARCH_PASSWORD:}'
